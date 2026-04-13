@@ -1,33 +1,31 @@
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from database import Base, get_db
+from api.books import get_collection
 from main import app
 
-TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/library_test_db"
+MONGO_TEST_URL = "mongodb://mongo_admin:password@localhost:27017"
+MONGO_TEST_DB = "books_test"
 
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=True)
-TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
-
-
-async def override_get_db():
-    async with TestSession() as session:
-        yield session
+test_client = AsyncIOMotorClient(MONGO_TEST_URL)
+test_db = test_client[MONGO_TEST_DB]
+test_collection = test_db["books"]
 
 
-app.dependency_overrides[get_db] = override_get_db
+def override_collection():
+    return test_collection
+
+
+app.dependency_overrides[get_collection] = override_collection
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup_db():
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def cleanup():
+    await test_collection.delete_many({})
     yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await test_engine.dispose()
+    await test_collection.delete_many({})
 
 
 @pytest_asyncio.fixture
@@ -49,12 +47,11 @@ async def test_create_book(client: AsyncClient):
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Test Book"
-    assert "id" in data
-    assert "created_at" in data
+    assert "_id" in data
 
 
 @pytest.mark.asyncio
-async def test_get_books_cursor_pagination(client: AsyncClient):
+async def test_get_books_pagination(client: AsyncClient):
     for i in range(5):
         await client.post("/books/", json={
             "title": f"Book {i}",
@@ -64,34 +61,18 @@ async def test_get_books_cursor_pagination(client: AsyncClient):
             "year": 2020 + i,
         })
 
-    # first page
-    response = await client.get("/books/?size=2")
+    response = await client.get("/books/?limit=2&offset=0")
     assert response.status_code == 200
     data = response.json()
+    assert data["total"] == 5
     assert len(data["items"]) == 2
-    assert data["has_next"] is True
-    assert data["next_cursor"] is not None
-    assert data["size"] == 2
+    assert data["limit"] == 2
+    assert data["offset"] == 0
 
-    # second page using cursor
-    cursor = data["next_cursor"]
-    response2 = await client.get(f"/books/?size=2&cursor={cursor}")
+    response2 = await client.get("/books/?limit=2&offset=2")
     data2 = response2.json()
     assert len(data2["items"]) == 2
-    assert data2["has_next"] is True
-
-    # verify no overlap between pages
-    ids_page1 = {item["id"] for item in data["items"]}
-    ids_page2 = {item["id"] for item in data2["items"]}
-    assert ids_page1.isdisjoint(ids_page2)
-
-    # third page — last item
-    cursor2 = data2["next_cursor"]
-    response3 = await client.get(f"/books/?size=2&cursor={cursor2}")
-    data3 = response3.json()
-    assert len(data3["items"]) == 1
-    assert data3["has_next"] is False
-    assert data3["next_cursor"] is None
+    assert data2["offset"] == 2
 
 
 @pytest.mark.asyncio
@@ -103,7 +84,7 @@ async def test_get_book_by_id(client: AsyncClient):
         "status": "available",
         "year": 2020,
     })
-    book_id = create_resp.json()["id"]
+    book_id = create_resp.json()["_id"]
 
     response = await client.get(f"/books/{book_id}")
     assert response.status_code == 200
@@ -112,7 +93,7 @@ async def test_get_book_by_id(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_book_not_found(client: AsyncClient):
-    response = await client.get("/books/00000000-0000-0000-0000-000000000000")
+    response = await client.get("/books/000000000000000000000000")
     assert response.status_code == 404
 
 
@@ -125,7 +106,7 @@ async def test_delete_book(client: AsyncClient):
         "status": "available",
         "year": 2020,
     })
-    book_id = create_resp.json()["id"]
+    book_id = create_resp.json()["_id"]
 
     response = await client.delete(f"/books/{book_id}")
     assert response.status_code == 204

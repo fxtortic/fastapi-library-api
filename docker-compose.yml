@@ -1,16 +1,22 @@
+volumes:
+  mongo_data:
+
 services:
-  db:
-    image: postgres:16-alpine
+  mongodb:
+    image: mongo:latest
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: library_db
-    ports:
-      - "5432:5432"
+      MONGO_INITDB_ROOT_USERNAME: mongo_admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: books
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mongo_data:/var/lib/mongo/data
+    ports:
+      - "27017:27017"
+    networks:
+      - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "mongosh", "-u", "mongo_admin", "-p", "password", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -20,10 +26,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/library_db
+      MONGO_URL: mongodb://mongo_admin:password@mongodb:27017/?authSource=admin
+      mongodb: books
+    networks:
+      - app_network
     depends_on:
-      db:
+      mongodb:
         condition: service_healthy
 
-volumes:
-  pgdata:
+networks:
+  app_network:
+    driver: bridge
