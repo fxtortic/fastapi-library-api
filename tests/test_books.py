@@ -50,10 +50,11 @@ async def test_create_book(client: AsyncClient):
     data = response.json()
     assert data["title"] == "Test Book"
     assert "id" in data
+    assert "created_at" in data
 
 
 @pytest.mark.asyncio
-async def test_get_books_pagination(client: AsyncClient):
+async def test_get_books_cursor_pagination(client: AsyncClient):
     for i in range(5):
         await client.post("/books/", json={
             "title": f"Book {i}",
@@ -63,18 +64,34 @@ async def test_get_books_pagination(client: AsyncClient):
             "year": 2020 + i,
         })
 
-    response = await client.get("/books/?limit=2&offset=0")
+    # first page
+    response = await client.get("/books/?size=2")
     assert response.status_code == 200
     data = response.json()
-    assert data["total"] == 5
     assert len(data["items"]) == 2
-    assert data["limit"] == 2
-    assert data["offset"] == 0
+    assert data["has_next"] is True
+    assert data["next_cursor"] is not None
+    assert data["size"] == 2
 
-    response2 = await client.get("/books/?limit=2&offset=2")
+    # second page using cursor
+    cursor = data["next_cursor"]
+    response2 = await client.get(f"/books/?size=2&cursor={cursor}")
     data2 = response2.json()
     assert len(data2["items"]) == 2
-    assert data2["offset"] == 2
+    assert data2["has_next"] is True
+
+    # verify no overlap between pages
+    ids_page1 = {item["id"] for item in data["items"]}
+    ids_page2 = {item["id"] for item in data2["items"]}
+    assert ids_page1.isdisjoint(ids_page2)
+
+    # third page — last item
+    cursor2 = data2["next_cursor"]
+    response3 = await client.get(f"/books/?size=2&cursor={cursor2}")
+    data3 = response3.json()
+    assert len(data3["items"]) == 1
+    assert data3["has_next"] is False
+    assert data3["next_cursor"] is None
 
 
 @pytest.mark.asyncio

@@ -1,26 +1,25 @@
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from repository import book_repository
-from schemas.book import BookCreate, PaginatedBooks, BookResponse
+from schemas.book import BookCreate, CursorPaginatedBooks, BookResponse
 from models.book_data import Book
 
 
 async def get_books(
     db: AsyncSession,
-    limit: int,
-    offset: int,
+    size: int,
+    cursor: str | None = None,
     status: str | None = None,
     author: str | None = None,
-    sort_by: str | None = None,
-) -> PaginatedBooks:
-    books, total = await book_repository.get_all_books(
-        db, limit, offset, status, author, sort_by
+) -> CursorPaginatedBooks:
+    books, next_cursor, has_next = await book_repository.get_all_books(
+        db, size, cursor, status, author
     )
-    return PaginatedBooks(
+    return CursorPaginatedBooks(
         items=[BookResponse.model_validate(b) for b in books],
-        total=total,
-        limit=limit,
-        offset=offset,
+        next_cursor=next_cursor,
+        has_next=has_next,
+        size=size,
     )
 
 

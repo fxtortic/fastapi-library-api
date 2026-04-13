@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from uuid import UUID
+from datetime import datetime
 from enum import Enum
 
 
@@ -18,12 +19,13 @@ class BookCreate(BaseModel):
 
 class BookResponse(BookCreate):
     id: UUID
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-class PaginatedBooks(BaseModel):
+class CursorPaginatedBooks(BaseModel):
     items: list[BookResponse]
-    total: int
-    limit: int
-    offset: int
+    next_cursor: str | None
+    has_next: bool
+    size: int

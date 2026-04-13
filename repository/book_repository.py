@@ -1,40 +1,57 @@
+import base64
 from uuid import UUID
-from sqlalchemy import select, func
+from datetime import datetime, timezone
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.book_data import Book
 
 
+def encode_cursor(created_at: datetime, book_id: UUID) -> str:
+    raw = f"{created_at.isoformat()}|{book_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    ts_str, id_str = raw.split("|", 1)
+    return datetime.fromisoformat(ts_str), UUID(id_str)
+
+
 async def get_all_books(
     db: AsyncSession,
-    limit: int,
-    offset: int,
+    size: int,
+    cursor: str | None = None,
     status: str | None = None,
     author: str | None = None,
-    sort_by: str | None = None,
-) -> tuple[list[Book], int]:
+) -> tuple[list[Book], str | None, bool]:
     query = select(Book)
-    count_query = select(func.count()).select_from(Book)
 
     if status:
         query = query.where(Book.status == status)
-        count_query = count_query.where(Book.status == status)
-
     if author:
         query = query.where(Book.author == author)
-        count_query = count_query.where(Book.author == author)
 
-    if sort_by == "title":
-        query = query.order_by(Book.title)
-    elif sort_by == "year":
-        query = query.order_by(Book.year)
-    else:
-        query = query.order_by(Book.title)
+    if cursor:
+        cursor_ts, cursor_id = decode_cursor(cursor)
+        query = query.where(
+            tuple_(Book.created_at, Book.id) > tuple_(cursor_ts, cursor_id)
+        )
 
-    total = await db.scalar(count_query)
-    result = await db.execute(query.limit(limit).offset(offset))
+    query = query.order_by(Book.created_at, Book.id).limit(size + 1)
+
+    result = await db.execute(query)
     books = list(result.scalars().all())
 
-    return books, total
+    has_next = len(books) > size
+    if has_next:
+        books = books[:size]
+
+    next_cursor = None
+    if has_next and books:
+        last = books[-1]
+        next_cursor = encode_cursor(last.created_at, last.id)
+
+    return books, next_cursor, has_next
 
 
 async def get_book_by_id(db: AsyncSession, book_id: UUID) -> Book | None:

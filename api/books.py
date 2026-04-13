@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from schemas.book import BookCreate, BookResponse, PaginatedBooks
+from schemas.book import BookCreate, BookResponse, CursorPaginatedBooks
 from services import book_service
 from database import get_db
 from uuid import UUID
@@ -8,16 +8,15 @@ from uuid import UUID
 router = APIRouter(prefix="/books", tags=["Books"])
 
 
-@router.get("/", response_model=PaginatedBooks)
+@router.get("/", response_model=CursorPaginatedBooks)
 async def get_books(
-    limit: int = Query(default=10, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    size: int = Query(default=10, ge=1, le=100),
+    cursor: str | None = Query(default=None),
     status: str = None,
     author: str = None,
-    sort_by: str = None,
     db: AsyncSession = Depends(get_db),
 ):
-    return await book_service.get_books(db, limit, offset, status, author, sort_by)
+    return await book_service.get_books(db, size, cursor, status, author)
 
 
 @router.get("/{book_id}", response_model=BookResponse)

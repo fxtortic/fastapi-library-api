@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import String, Integer, Text, Enum as SAEnum
+from datetime import datetime
+from sqlalchemy import String, Integer, Text, DateTime, Enum as SAEnum, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
@@ -18,3 +19,6 @@ class Book(Base):
         SAEnum("available", "borrowed", name="book_status"), nullable=False
     )
     year: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
