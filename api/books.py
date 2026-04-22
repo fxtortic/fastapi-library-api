@@ -3,6 +3,7 @@ from flask_restful import Resource
 from marshmallow import ValidationError
 from schemas.book import BookCreateSchema, BookResponseSchema, PaginatedBooksSchema
 from services import book_service
+from api.auth_decorator import token_required
 
 book_create_schema = BookCreateSchema()
 book_response_schema = BookResponseSchema()
@@ -10,22 +11,24 @@ paginated_schema = PaginatedBooksSchema()
 
 
 class BookListResource(Resource):
+    method_decorators = [token_required]
+
     def get(self):
         """Get books with pagination
         ---
         tags:
           - Books
+        security:
+          - Bearer: []
         parameters:
           - name: limit
             in: query
             type: integer
             default: 10
-            description: Number of books per page
           - name: offset
             in: query
             type: integer
             default: 0
-            description: Number of books to skip
           - name: status
             in: query
             type: string
@@ -40,6 +43,8 @@ class BookListResource(Resource):
             description: Paginated list of books
             schema:
               $ref: '#/definitions/PaginatedBooks'
+          401:
+            description: Unauthorized
         """
         limit = request.args.get("limit", 10, type=int)
         offset = request.args.get("offset", 0, type=int)
@@ -57,6 +62,8 @@ class BookListResource(Resource):
         ---
         tags:
           - Books
+        security:
+          - Bearer: []
         parameters:
           - in: body
             name: body
@@ -70,6 +77,8 @@ class BookListResource(Resource):
               $ref: '#/definitions/BookResponse'
           400:
             description: Validation error
+          401:
+            description: Unauthorized
         """
         json_data = request.get_json()
         if not json_data:
@@ -85,11 +94,15 @@ class BookListResource(Resource):
 
 
 class BookResource(Resource):
+    method_decorators = [token_required]
+
     def get(self, book_id):
         """Get a book by ID
         ---
         tags:
           - Books
+        security:
+          - Bearer: []
         parameters:
           - name: book_id
             in: path
@@ -100,6 +113,8 @@ class BookResource(Resource):
             description: Book found
             schema:
               $ref: '#/definitions/BookResponse'
+          401:
+            description: Unauthorized
           404:
             description: Book not found
         """
@@ -113,6 +128,8 @@ class BookResource(Resource):
         ---
         tags:
           - Books
+        security:
+          - Bearer: []
         parameters:
           - name: book_id
             in: path
@@ -121,6 +138,8 @@ class BookResource(Resource):
         responses:
           204:
             description: Book deleted
+          401:
+            description: Unauthorized
           404:
             description: Book not found
         """

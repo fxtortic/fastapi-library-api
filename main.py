@@ -2,6 +2,7 @@ from flask import Flask
 from flask_restful import Api
 from flasgger import Swagger
 from api.books import BookListResource, BookResource
+from api.auth import RegisterResource, LoginResource, RefreshResource
 
 app = Flask(__name__)
 
@@ -23,7 +24,45 @@ swagger_template = {
         "title": "Library API",
         "version": "1.0",
     },
+    "securityDefinitions": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "Enter: Bearer <access_token>",
+        }
+    },
     "definitions": {
+        "UserRegister": {
+            "type": "object",
+            "required": ["username", "password"],
+            "properties": {
+                "username": {"type": "string", "minLength": 3},
+                "password": {"type": "string", "minLength": 6},
+            },
+        },
+        "UserLogin": {
+            "type": "object",
+            "required": ["username", "password"],
+            "properties": {
+                "username": {"type": "string"},
+                "password": {"type": "string"},
+            },
+        },
+        "Refresh": {
+            "type": "object",
+            "required": ["refresh_token"],
+            "properties": {
+                "refresh_token": {"type": "string"},
+            },
+        },
+        "Token": {
+            "type": "object",
+            "properties": {
+                "access_token": {"type": "string"},
+                "refresh_token": {"type": "string"},
+            },
+        },
         "BookCreate": {
             "type": "object",
             "required": ["title", "author", "description", "status", "year"],
@@ -64,6 +103,12 @@ swagger_template = {
 swagger = Swagger(app, config=swagger_config, template=swagger_template)
 api = Api(app)
 
+# Auth
+api.add_resource(RegisterResource, "/auth/register")
+api.add_resource(LoginResource, "/auth/login")
+api.add_resource(RefreshResource, "/auth/refresh")
+
+# Books
 api.add_resource(BookListResource, "/books/")
 api.add_resource(BookResource, "/books/<string:book_id>")
 
