@@ -1,20 +1,12 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from motor.motor_asyncio import AsyncIOMotorClient
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/library_db"
-)
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_DB = os.getenv("MONGO_DB", "library_db")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-async_session = async_sessionmaker(engine, expire_on_commit=False)
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[MONGO_DB]
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-async def get_db() -> AsyncSession:
-    async with async_session() as session:
-        yield session
+def get_db():
+    return db
