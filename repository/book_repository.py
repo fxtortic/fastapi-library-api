@@ -1,38 +1,32 @@
 from uuid import UUID, uuid4
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.database import Database
 
 
-async def get_all_books(
-    db: AsyncIOMotorDatabase,
-    limit: int,
-    offset: int,
-    status: str | None = None,
-    author: str | None = None,
-) -> tuple[list[dict], int]:
+def get_all_books(db: Database, limit: int, offset: int,
+                  status: str = None, author: str = None) -> tuple:
     filter_query = {}
     if status:
         filter_query["status"] = status
     if author:
         filter_query["author"] = author
 
-    total = await db.books.count_documents(filter_query)
-    cursor = db.books.find(filter_query).skip(offset).limit(limit)
-    books = await cursor.to_list(length=limit)
+    total = db.books.count_documents(filter_query)
+    books = list(db.books.find(filter_query).skip(offset).limit(limit))
 
     return books, total
 
 
-async def get_book_by_id(db: AsyncIOMotorDatabase, book_id: UUID) -> dict | None:
-    return await db.books.find_one({"_id": str(book_id)})
+def get_book_by_id(db: Database, book_id: str) -> dict | None:
+    return db.books.find_one({"_id": book_id})
 
 
-async def add_book(db: AsyncIOMotorDatabase, book_data: dict) -> dict:
+def add_book(db: Database, book_data: dict) -> dict:
     book_data["_id"] = str(book_data.pop("id", uuid4()))
-    await db.books.insert_one(book_data)
+    db.books.insert_one(book_data)
     book_data["id"] = book_data.pop("_id")
     return book_data
 
 
-async def delete_book(db: AsyncIOMotorDatabase, book_id: UUID) -> bool:
-    result = await db.books.delete_one({"_id": str(book_id)})
+def delete_book(db: Database, book_id: str) -> bool:
+    result = db.books.delete_one({"_id": book_id})
     return result.deleted_count > 0

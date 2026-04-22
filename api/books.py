@@ -1,38 +1,130 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from schemas.book import BookCreate, BookResponse, PaginatedBooks
+from flask import request
+from flask_restful import Resource
+from marshmallow import ValidationError
+from schemas.book import BookCreateSchema, BookResponseSchema, PaginatedBooksSchema
 from services import book_service
-from database import get_db
-from uuid import UUID
 
-router = APIRouter(prefix="/books", tags=["Books"])
-
-
-@router.get("/", response_model=PaginatedBooks)
-async def get_books(
-    limit: int = Query(default=10, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    status: str = None,
-    author: str = None,
-    db=Depends(get_db),
-):
-    return await book_service.get_books(db, limit, offset, status, author)
+book_create_schema = BookCreateSchema()
+book_response_schema = BookResponseSchema()
+paginated_schema = PaginatedBooksSchema()
 
 
-@router.get("/{book_id}", response_model=BookResponse)
-async def get_book(book_id: UUID, db=Depends(get_db)):
-    book = await book_service.get_book(db, book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return book
+class BookListResource(Resource):
+    def get(self):
+        """Get books with pagination
+        ---
+        tags:
+          - Books
+        parameters:
+          - name: limit
+            in: query
+            type: integer
+            default: 10
+            description: Number of books per page
+          - name: offset
+            in: query
+            type: integer
+            default: 0
+            description: Number of books to skip
+          - name: status
+            in: query
+            type: string
+            enum: [available, borrowed]
+            required: false
+          - name: author
+            in: query
+            type: string
+            required: false
+        responses:
+          200:
+            description: Paginated list of books
+            schema:
+              $ref: '#/definitions/PaginatedBooks'
+        """
+        limit = request.args.get("limit", 10, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        status = request.args.get("status")
+        author = request.args.get("author")
+
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        result = book_service.get_books(limit, offset, status, author)
+        return paginated_schema.dump(result), 200
+
+    def post(self):
+        """Create a new book
+        ---
+        tags:
+          - Books
+        parameters:
+          - in: body
+            name: body
+            required: true
+            schema:
+              $ref: '#/definitions/BookCreate'
+        responses:
+          201:
+            description: Book created
+            schema:
+              $ref: '#/definitions/BookResponse'
+          400:
+            description: Validation error
+        """
+        json_data = request.get_json()
+        if not json_data:
+            return {"message": "No input data"}, 400
+
+        try:
+            data = book_create_schema.load(json_data)
+        except ValidationError as err:
+            return {"errors": err.messages}, 400
+
+        book = book_service.create_book(data)
+        return book_response_schema.dump(book), 201
 
 
-@router.post("/", status_code=201, response_model=BookResponse)
-async def create_book(book: BookCreate, db=Depends(get_db)):
-    return await book_service.create_book(db, book)
+class BookResource(Resource):
+    def get(self, book_id):
+        """Get a book by ID
+        ---
+        tags:
+          - Books
+        parameters:
+          - name: book_id
+            in: path
+            type: string
+            required: true
+        responses:
+          200:
+            description: Book found
+            schema:
+              $ref: '#/definitions/BookResponse'
+          404:
+            description: Book not found
+        """
+        book = book_service.get_book(book_id)
+        if not book:
+            return {"message": "Book not found"}, 404
+        return book_response_schema.dump(book), 200
 
-
-@router.delete("/{book_id}", status_code=204)
-async def delete_book(book_id: UUID, db=Depends(get_db)):
-    deleted = await book_service.delete_book(db, book_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Book not found")
+    def delete(self, book_id):
+        """Delete a book
+        ---
+        tags:
+          - Books
+        parameters:
+          - name: book_id
+            in: path
+            type: string
+            required: true
+        responses:
+          204:
+            description: Book deleted
+          404:
+            description: Book not found
+        """
+        deleted = book_service.delete_book(book_id)
+        if not deleted:
+            return {"message": "Book not found"}, 404
+        return "", 204

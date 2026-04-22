@@ -1,27 +1,20 @@
-from pydantic import BaseModel, Field
-from uuid import UUID
-from enum import Enum
+from marshmallow import Schema, fields, validate
 
 
-class BookStatus(str, Enum):
-    available = "available"
-    borrowed = "borrowed"
+class BookCreateSchema(Schema):
+    title = fields.Str(required=True, validate=validate.Length(min=1))
+    author = fields.Str(required=True)
+    description = fields.Str(required=True)
+    status = fields.Str(required=True, validate=validate.OneOf(["available", "borrowed"]))
+    year = fields.Int(required=True)
 
 
-class BookCreate(BaseModel):
-    title: str = Field(min_length=1)
-    author: str
-    description: str
-    status: BookStatus
-    year: int
+class BookResponseSchema(BookCreateSchema):
+    id = fields.Str(required=True)
 
 
-class BookResponse(BookCreate):
-    id: UUID
-
-
-class PaginatedBooks(BaseModel):
-    items: list[BookResponse]
-    total: int
-    limit: int
-    offset: int
+class PaginatedBooksSchema(Schema):
+    items = fields.List(fields.Nested(BookResponseSchema))
+    total = fields.Int()
+    limit = fields.Int()
+    offset = fields.Int()
