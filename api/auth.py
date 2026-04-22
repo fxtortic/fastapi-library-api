@@ -3,6 +3,7 @@ from flask_restful import Resource
 from marshmallow import ValidationError
 from schemas.user import UserRegisterSchema, UserLoginSchema, RefreshSchema, TokenSchema
 from services import auth_service
+from rate_limiter import rate_limit
 
 register_schema = UserRegisterSchema()
 login_schema = UserLoginSchema()
@@ -11,6 +12,8 @@ token_schema = TokenSchema()
 
 
 class RegisterResource(Resource):
+    method_decorators = [rate_limit]
+
     def post(self):
         """Register a new user
         ---
@@ -31,6 +34,8 @@ class RegisterResource(Resource):
             description: Validation error
           409:
             description: Username already exists
+          429:
+            description: Rate limit exceeded
         """
         json_data = request.get_json()
         if not json_data:
@@ -49,6 +54,8 @@ class RegisterResource(Resource):
 
 
 class LoginResource(Resource):
+    method_decorators = [rate_limit]
+
     def post(self):
         """Login
         ---
@@ -67,6 +74,8 @@ class LoginResource(Resource):
               $ref: '#/definitions/Token'
           401:
             description: Invalid credentials
+          429:
+            description: Rate limit exceeded
         """
         json_data = request.get_json()
         if not json_data:
@@ -85,6 +94,8 @@ class LoginResource(Resource):
 
 
 class RefreshResource(Resource):
+    method_decorators = [rate_limit]
+
     def post(self):
         """Refresh access token
         ---
@@ -103,6 +114,8 @@ class RefreshResource(Resource):
               $ref: '#/definitions/Token'
           401:
             description: Invalid refresh token
+          429:
+            description: Rate limit exceeded
         """
         json_data = request.get_json()
         if not json_data:
