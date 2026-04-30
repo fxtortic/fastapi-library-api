@@ -1,18 +1,24 @@
-import os
+"""
+Автономні тести — SQLite in-memory, нуль зовнішніх залежностей.
+pip install httpx aiosqlite pytest pytest-asyncio
+"""
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 from main import app
 
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5433/library_test_db?ssl=disable"
-)
+# ── SQLite in-memory (замість PostgreSQL) ──
 
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=True)
+test_engine = create_async_engine(
+    "sqlite+aiosqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
 
 
@@ -39,6 +45,9 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+# ─────────────── ТЕСТИ ───────────────
 
 
 @pytest.mark.asyncio

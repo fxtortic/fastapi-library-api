@@ -1,7 +1,7 @@
 import base64
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.book_data import Book
 
@@ -34,9 +34,11 @@ async def get_all_books(
     if cursor:
         cursor_ts, cursor_id = decode_cursor(cursor)
         query = query.where(
-            tuple_(Book.created_at, Book.id) > tuple_(cursor_ts, cursor_id)
+            or_(
+                Book.created_at > cursor_ts,
+                and_(Book.created_at == cursor_ts, Book.id > cursor_id),
+            )
         )
-
     query = query.order_by(Book.created_at, Book.id).limit(size + 1)
 
     result = await db.execute(query)
